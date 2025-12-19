@@ -1,6 +1,11 @@
 import { bootstrapApplication } from '@angular/platform-browser';
-import { appConfig } from './app/app.config';
-import { App } from './app/app';
+import { provideRouter } from '@angular/router';
+import { provideHttpClient, withInterceptors } from '@angular/common/http';
 
-bootstrapApplication(App, appConfig)
-  .catch((err) => console.error(err));
+import { AppComponent } from './app/app';
+import { routes } from './app/app.routes';
+import { apiBaseUrlInterceptor } from './app/core/interceptors/api-base-url.interceptor';
+
+bootstrapApplication(AppComponent, {
+  providers: [provideRouter(routes), provideHttpClient(withInterceptors([apiBaseUrlInterceptor]))],
+}).catch((err) => console.error(err));
