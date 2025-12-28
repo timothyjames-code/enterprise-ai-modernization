@@ -1,5 +1,7 @@
 import { Routes } from '@angular/router';
 
+import('./features/cases/cases.page');
+
 export const routes: Routes = [
   { path: '', pathMatch: 'full', redirectTo: 'cases' },
   {
