@@ -1,6 +1,9 @@
 com\example\backend\config\CorsConfig$1.class
+com\example\backend\common\ApiExceptionHandler.class
 com\example\backend\cases\CaseEntity.class
+com\example\backend\cases\CreateCaseRequest.class
 com\example\backend\cases\CaseController.class
+com\example\backend\cases\CaseDto.class
 com\example\backend\api\HealthController.class
 com\example\backend\config\CorsConfig.class
 com\example\backend\cases\CaseRepository.class

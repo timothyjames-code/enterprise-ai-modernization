@@ -14,6 +14,10 @@ export class ApiHttpClient {
     return this.http.post<T>(path, body);
   }
 
+  delete<T>(path: string) {
+    return this.http.delete<T>(path);
+  }
+
   private toParams(params?: Record<string, string | number | boolean>): HttpParams | undefined {
     if (!params) return undefined;
 

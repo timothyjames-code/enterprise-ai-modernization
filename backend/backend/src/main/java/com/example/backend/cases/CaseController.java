@@ -1,8 +1,9 @@
 package com.example.backend.cases;
 
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import jakarta.validation.Valid;
+import org.springframework.data.domain.Sort;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
@@ -17,7 +18,30 @@ public class CaseController {
   }
 
   @GetMapping
-  public List<CaseEntity> getCases() {
-    return repository.findAll();
+  public List<CaseDto> list() {
+    return repository.findAll(Sort.by(Sort.Direction.DESC, "createdAt"))
+        .stream()
+        .map(CaseDto::fromEntity)
+        .toList();
+  }
+
+  @PostMapping
+  public CaseDto create(@Valid @RequestBody CreateCaseRequest req) {
+    var title = req.title().trim();
+    var status = (req.status() == null || req.status().trim().isBlank())
+        ? "Open"
+        : req.status().trim();
+
+    var saved = repository.save(new CaseEntity(title, status));
+    return CaseDto.fromEntity(saved);
+  }
+
+  @DeleteMapping("/{id}")
+  public ResponseEntity<Void> delete(@PathVariable Long id) {
+    if (!repository.existsById(id)) {
+      return ResponseEntity.notFound().build();
+    }
+    repository.deleteById(id);
+    return ResponseEntity.noContent().build();
   }
 }
