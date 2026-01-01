@@ -4,11 +4,19 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { ApiHttpClient } from '../../core/services/api/http-client.service';
 
-// ✅ Material modules for the toolbar
+// Angular Material
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatButtonModule } from '@angular/material/button';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatCardModule } from '@angular/material/card';
+import { MatIconModule } from '@angular/material/icon';
+import { MatDividerModule } from '@angular/material/divider';
+import { MatTooltipModule } from '@angular/material/tooltip';
+
+import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog.component';
 
 type CaseDto = {
   id: number;
@@ -30,7 +38,7 @@ type PageResponse<T> = {
 const DEFAULT_PAGE = 0;
 const DEFAULT_SIZE = 10;
 const DEFAULT_SORT = 'createdAt,desc';
-const DEFAULT_STATUS = ''; // '' = All
+const DEFAULT_STATUS = '';
 
 @Component({
   selector: 'app-cases-page',
@@ -41,159 +49,312 @@ const DEFAULT_STATUS = ''; // '' = All
     DatePipe,
     FormsModule,
 
-    // ✅ Material
+    // Material
     MatFormFieldModule,
     MatInputModule,
     MatSelectModule,
     MatButtonModule,
+    MatDialogModule,
+    MatSnackBarModule,
+    MatCardModule,
+    MatIconModule,
+    MatDividerModule,
+    MatTooltipModule,
+  ],
+  styles: [
+    `
+      .page {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 16px;
+      }
+
+      .header {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 12px;
+      }
+
+      .subtitle {
+        color: color-mix(in srgb, currentColor 65%, transparent);
+      }
+
+      .toolbar {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        flex-wrap: wrap;
+        margin: 12px 0 16px;
+      }
+
+      .createRow {
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+        flex-wrap: wrap;
+        margin: 12px 0 16px;
+      }
+
+      .cards {
+        display: grid;
+        gap: 12px;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        margin-top: 12px;
+      }
+
+      .caseCard {
+        border-radius: 16px;
+      }
+
+      .caseTitle {
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+
+      .meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 12px;
+        align-items: center;
+        margin-top: 6px;
+        color: color-mix(in srgb, currentColor 65%, transparent);
+        font-size: 12px;
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 2px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        line-height: 20px;
+        background: color-mix(in srgb, currentColor 10%, transparent);
+      }
+
+      .badgeDot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        display: inline-block;
+      }
+
+      .cardActions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 4px;
+      }
+
+      .editRow {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        flex-wrap: wrap;
+        margin-top: 12px;
+      }
+
+      .muted {
+        color: color-mix(in srgb, currentColor 65%, transparent);
+      }
+
+      .danger {
+        color: #b00020;
+      }
+    `,
   ],
   template: `
-    <h1>Cases</h1>
-
-    <!-- ✅ Material toolbar -->
-    <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin: 12px 0;">
-      <mat-form-field appearance="outline" style="min-width: 260px;">
-        <mat-label>Search</mat-label>
-        <input
-          matInput
-          placeholder="Search by title..."
-          [ngModel]="search()"
-          (ngModelChange)="onSearchChange($event)"
-        />
-      </mat-form-field>
-
-      <mat-form-field appearance="outline" style="min-width: 180px;">
-        <mat-label>Status</mat-label>
-        <mat-select [ngModel]="statusFilter()" (ngModelChange)="onStatusChange($event)">
-          <mat-option [value]="''">All statuses</mat-option>
-          <mat-option value="Open">Open</mat-option>
-          <mat-option value="In Review">In Review</mat-option>
-          <mat-option value="Closed">Closed</mat-option>
-        </mat-select>
-      </mat-form-field>
-
-      <mat-form-field appearance="outline" style="min-width: 180px;">
-        <mat-label>Sort</mat-label>
-        <mat-select [ngModel]="sort()" (ngModelChange)="onSortChange($event)">
-          <mat-option value="createdAt,desc">Newest</mat-option>
-          <mat-option value="createdAt,asc">Oldest</mat-option>
-          <mat-option value="title,asc">Title A–Z</mat-option>
-          <mat-option value="title,desc">Title Z–A</mat-option>
-        </mat-select>
-      </mat-form-field>
-
-      <mat-form-field appearance="outline" style="width: 120px;">
-        <mat-label>Size</mat-label>
-        <mat-select [ngModel]="size()" (ngModelChange)="onSizeChange($event)">
-          <mat-option [value]="5">5</mat-option>
-          <mat-option [value]="10">10</mat-option>
-          <mat-option [value]="20">20</mat-option>
-        </mat-select>
-      </mat-form-field>
-
-      <button mat-stroked-button (click)="prevPage()" [disabled]="loading() || pageData()?.first">
-        Prev
-      </button>
-      <button mat-stroked-button (click)="nextPage()" [disabled]="loading() || pageData()?.last">
-        Next
-      </button>
-
-      <span *ngIf="pageData() as p" style="color:#555;">
-        Page {{ p.number + 1 }} / {{ p.totalPages || 1 }} • {{ p.totalElements }} total
-      </span>
-    </div>
-
-    <!-- Create form (left as plain HTML for now) -->
-    <div style="margin: 12px 0; display:flex; gap:8px; align-items:flex-start;">
-      <div style="display:flex; flex-direction:column; gap:4px;">
-        <input
-          placeholder="Case title"
-          [ngModel]="newTitle()"
-          (ngModelChange)="onTitleChange($event)"
-          style="min-width: 280px;"
-        />
-        <small *ngIf="fieldErrors()['title']" style="color:red">
-          {{ fieldErrors()['title'] }}
-        </small>
+    <div class="page">
+      <div class="header">
+        <div>
+          <h1 style="margin:0;">Cases</h1>
+          <div class="subtitle" *ngIf="pageData() as p">
+            Page {{ p.number + 1 }} / {{ p.totalPages || 1 }} • {{ p.totalElements }} total
+          </div>
+        </div>
       </div>
 
-      <select [ngModel]="newStatus()" (ngModelChange)="newStatus.set($event)">
-        <option value="Open">Open</option>
-        <option value="In Review">In Review</option>
-        <option value="Closed">Closed</option>
-      </select>
-
-      <button (click)="createCase()" [disabled]="creating() || !newTitle().trim()">
-        {{ creating() ? 'Adding...' : 'Add' }}
-      </button>
-    </div>
-
-    <p *ngIf="loading()">Loading...</p>
-    <p *ngIf="error() as e" style="color:red">{{ e }}</p>
-
-    <ul *ngIf="!loading() && !error()">
-      <li *ngFor="let c of cases()" style="margin: 8px 0;">
-        <ng-container *ngIf="editingId() !== c.id; else editRow">
-          <strong>#{{ c.id }}</strong> — {{ c.title }}
-          <span>({{ c.status }})</span>
-          <small> • {{ c.createdAt | date : 'medium' }}</small>
-
-          <button (click)="startEdit(c)" style="margin-left: 8px;">Edit</button>
-
-          <button
-            (click)="deleteCase(c.id)"
-            [disabled]="deletingIds().has(c.id)"
-            style="margin-left: 8px;"
-          >
-            {{ deletingIds().has(c.id) ? 'Deleting...' : 'Delete' }}
-          </button>
-        </ng-container>
-
-        <ng-template #editRow>
-          <strong>#{{ c.id }}</strong>
-
+      <!-- ✅ Material toolbar -->
+      <div class="toolbar">
+        <mat-form-field appearance="outline" style="min-width: 260px;">
+          <mat-label>Search</mat-label>
           <input
-            [ngModel]="editTitle()"
-            (ngModelChange)="editTitle.set($event)"
-            style="margin-left: 8px; min-width: 260px;"
+            matInput
+            placeholder="Search by title..."
+            [ngModel]="search()"
+            (ngModelChange)="onSearchChange($event)"
           />
+        </mat-form-field>
 
-          <select
-            [ngModel]="editStatus()"
-            (ngModelChange)="editStatus.set($event)"
-            style="margin-left: 8px;"
-          >
-            <option value="Open">Open</option>
-            <option value="In Review">In Review</option>
-            <option value="Closed">Closed</option>
-          </select>
+        <mat-form-field appearance="outline" style="min-width: 180px;">
+          <mat-label>Status</mat-label>
+          <mat-select [ngModel]="statusFilter()" (ngModelChange)="onStatusChange($event)">
+            <mat-option value="">All statuses</mat-option>
+            <mat-option value="Open">Open</mat-option>
+            <mat-option value="In Review">In Review</mat-option>
+            <mat-option value="Closed">Closed</mat-option>
+          </mat-select>
+        </mat-form-field>
 
-          <button
-            (click)="saveEdit()"
-            [disabled]="savingEdit() || !editTitle().trim()"
-            style="margin-left: 8px;"
-          >
-            {{ savingEdit() ? 'Saving...' : 'Save' }}
-          </button>
+        <mat-form-field appearance="outline" style="min-width: 180px;">
+          <mat-label>Sort</mat-label>
+          <mat-select [ngModel]="sort()" (ngModelChange)="onSortChange($event)">
+            <mat-option value="createdAt,desc">Newest</mat-option>
+            <mat-option value="createdAt,asc">Oldest</mat-option>
+            <mat-option value="title,asc">Title A–Z</mat-option>
+            <mat-option value="title,desc">Title Z–A</mat-option>
+          </mat-select>
+        </mat-form-field>
 
-          <button (click)="cancelEdit()" [disabled]="savingEdit()" style="margin-left: 8px;">
-            Cancel
-          </button>
+        <mat-form-field appearance="outline" style="width: 120px;">
+          <mat-label>Size</mat-label>
+          <mat-select [ngModel]="size()" (ngModelChange)="onSizeChange($event)">
+            <mat-option [value]="5">5</mat-option>
+            <mat-option [value]="10">10</mat-option>
+            <mat-option [value]="20">20</mat-option>
+          </mat-select>
+        </mat-form-field>
 
-          <small *ngIf="editError()" style="color:red; margin-left: 8px;">
-            {{ editError() }}
-          </small>
-        </ng-template>
-      </li>
-    </ul>
+        <button mat-stroked-button (click)="prevPage()" [disabled]="loading() || pageData()?.first">
+          Prev
+        </button>
+        <button mat-stroked-button (click)="nextPage()" [disabled]="loading() || pageData()?.last">
+          Next
+        </button>
+      </div>
 
-    <p *ngIf="!loading() && !error() && cases().length === 0">No cases found.</p>
+      <mat-divider></mat-divider>
+
+      <!-- ✅ Material Create form -->
+      <div class="createRow">
+        <mat-form-field appearance="outline" style="min-width: 320px; flex: 1 1 320px;">
+          <mat-label>Case title</mat-label>
+          <input
+            matInput
+            placeholder="Enter a title..."
+            [ngModel]="newTitle()"
+            (ngModelChange)="onTitleChange($event)"
+          />
+          <mat-error *ngIf="fieldErrors()['title']">
+            {{ fieldErrors()['title'] }}
+          </mat-error>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" style="min-width: 180px;">
+          <mat-label>Status</mat-label>
+          <mat-select [ngModel]="newStatus()" (ngModelChange)="newStatus.set($event)">
+            <mat-option value="Open">Open</mat-option>
+            <mat-option value="In Review">In Review</mat-option>
+            <mat-option value="Closed">Closed</mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        <button
+          mat-raised-button
+          color="primary"
+          (click)="createCase()"
+          [disabled]="creating() || !newTitle().trim()"
+          style="height: 56px;"
+        >
+          {{ creating() ? 'Adding...' : 'Add' }}
+        </button>
+      </div>
+
+      <p *ngIf="loading()" class="muted" style="margin: 16px 0;">Loading...</p>
+      <p *ngIf="error() as e" class="danger" style="margin: 16px 0;">{{ e }}</p>
+
+      <!-- ✅ Card List -->
+      <div *ngIf="!loading() && !error()" class="cards">
+        <mat-card class="caseCard" appearance="outlined" *ngFor="let c of cases()">
+          <mat-card-header>
+            <mat-card-title class="caseTitle">#{{ c.id }} — {{ c.title }}</mat-card-title>
+            <mat-card-subtitle class="meta">
+              <span class="badge" [attr.aria-label]="'Status: ' + c.status">
+                <span class="badgeDot" [style.background]="statusColor(c.status)"></span>
+                {{ c.status }}
+              </span>
+              <span>Created: {{ c.createdAt | date : 'medium' }}</span>
+            </mat-card-subtitle>
+
+            <div class="cardActions" style="margin-left: auto;">
+              <button
+                mat-icon-button
+                matTooltip="Edit"
+                (click)="startEdit(c)"
+                [disabled]="editingId() === c.id || savingEdit() || creating()"
+                aria-label="Edit case"
+              >
+                <mat-icon>edit</mat-icon>
+              </button>
+
+              <button
+                mat-icon-button
+                color="warn"
+                matTooltip="Delete"
+                (click)="deleteCase(c.id)"
+                [disabled]="deletingIds().has(c.id) || savingEdit() || creating()"
+                aria-label="Delete case"
+              >
+                <mat-icon>delete</mat-icon>
+              </button>
+            </div>
+          </mat-card-header>
+
+          <mat-card-content>
+            <!-- Inline edit panel inside the card -->
+            <div *ngIf="editingId() === c.id" class="editRow">
+              <mat-form-field appearance="outline" style="min-width: 280px; flex: 1 1 280px;">
+                <mat-label>Title</mat-label>
+                <input matInput [ngModel]="editTitle()" (ngModelChange)="editTitle.set($event)" />
+              </mat-form-field>
+
+              <mat-form-field appearance="outline" style="min-width: 180px;">
+                <mat-label>Status</mat-label>
+                <mat-select [ngModel]="editStatus()" (ngModelChange)="editStatus.set($event)">
+                  <mat-option value="Open">Open</mat-option>
+                  <mat-option value="In Review">In Review</mat-option>
+                  <mat-option value="Closed">Closed</mat-option>
+                </mat-select>
+              </mat-form-field>
+
+              <button
+                mat-raised-button
+                color="primary"
+                (click)="saveEdit()"
+                [disabled]="savingEdit() || !editTitle().trim()"
+              >
+                {{ savingEdit() ? 'Saving...' : 'Save' }}
+              </button>
+
+              <button mat-button (click)="cancelEdit()" [disabled]="savingEdit()">Cancel</button>
+
+              <span *ngIf="editError()" class="danger">
+                {{ editError() }}
+              </span>
+            </div>
+          </mat-card-content>
+        </mat-card>
+      </div>
+
+      <p
+        *ngIf="!loading() && !error() && cases().length === 0"
+        class="muted"
+        style="margin-top:16px;"
+      >
+        No cases found.
+      </p>
+    </div>
   `,
 })
 export class CasesPage {
   private readonly api = inject(ApiHttpClient);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly dialog = inject(MatDialog);
+  private readonly snack = inject(MatSnackBar);
 
   // Data
   readonly cases = signal<CaseDto[]>([]);
@@ -228,7 +389,7 @@ export class CasesPage {
   readonly editError = signal<string | null>(null);
 
   constructor() {
-    // URL -> state
+    // URL -> state (refresh + back/forward)
     this.route.queryParamMap.subscribe((q) => {
       this.syncingFromUrl = true;
 
@@ -244,13 +405,30 @@ export class CasesPage {
       this.search.set(search);
       this.statusFilter.set(status);
 
-      // cancel edit on navigation/query changes
       this.cancelEdit();
 
       this.syncingFromUrl = false;
 
       this.loadCases();
     });
+  }
+
+  statusColor(status: string): string {
+    // simple “modern” dot color that plays fine with M3 themes
+    switch ((status ?? '').toLowerCase()) {
+      case 'open':
+        return '#2e7d32';
+      case 'in review':
+        return '#ed6c02';
+      case 'closed':
+        return '#6d6d6d';
+      default:
+        return '#6d6d6d';
+    }
+  }
+
+  private toast(message: string, action = 'OK', duration = 2500) {
+    this.snack.open(message, action, { duration });
   }
 
   private toInt(value: string | null, fallback: number) {
@@ -359,6 +537,7 @@ export class CasesPage {
         error: (err) => {
           this.error.set(`Load failed: ${err?.message ?? 'unknown'}`);
           this.loading.set(false);
+          this.toast('Failed to load cases');
         },
       });
   }
@@ -377,6 +556,7 @@ export class CasesPage {
         this.newTitle.set('');
         this.newStatus.set('Open');
         this.creating.set(false);
+        this.toast('Case created');
         this.loadCases();
       },
       error: (err) => {
@@ -386,36 +566,52 @@ export class CasesPage {
         if (apiErrors && typeof apiErrors === 'object') {
           this.fieldErrors.set(apiErrors);
           this.error.set(err?.error?.message ?? 'Validation failed');
+          this.toast(err?.error?.message ?? 'Validation failed');
           return;
         }
 
         this.error.set(`Create failed: ${err?.message ?? 'unknown'}`);
+        this.toast('Create failed');
       },
     });
   }
 
   deleteCase(id: number) {
-    const ok = window.confirm(`Delete case #${id}? This can't be undone.`);
-    if (!ok) return;
+    this.dialog
+      .open(ConfirmDialogComponent, {
+        width: '360px',
+        data: {
+          title: 'Delete case',
+          message: `Delete case #${id}? This can't be undone.`,
+          confirmText: 'Delete',
+          cancelText: 'Cancel',
+        },
+      })
+      .afterClosed()
+      .subscribe((confirmed) => {
+        if (!confirmed) return;
 
-    const next = new Set(this.deletingIds());
-    next.add(id);
-    this.deletingIds.set(next);
+        const next = new Set(this.deletingIds());
+        next.add(id);
+        this.deletingIds.set(next);
 
-    this.api.delete<void>(`/cases/${id}`).subscribe({
-      next: () => {
-        const after = new Set(this.deletingIds());
-        after.delete(id);
-        this.deletingIds.set(after);
-        this.loadCases();
-      },
-      error: (err) => {
-        const after = new Set(this.deletingIds());
-        after.delete(id);
-        this.deletingIds.set(after);
-        this.error.set(`Delete failed: ${err?.message ?? 'unknown'}`);
-      },
-    });
+        this.api.delete<void>(`/cases/${id}`).subscribe({
+          next: () => {
+            const after = new Set(this.deletingIds());
+            after.delete(id);
+            this.deletingIds.set(after);
+            this.toast('Case deleted');
+            this.loadCases();
+          },
+          error: (err) => {
+            const after = new Set(this.deletingIds());
+            after.delete(id);
+            this.deletingIds.set(after);
+            this.error.set(`Delete failed: ${err?.message ?? 'unknown'}`);
+            this.toast('Delete failed');
+          },
+        });
+      });
   }
 
   startEdit(c: CaseDto) {
@@ -446,6 +642,7 @@ export class CasesPage {
     this.api.put<CaseDto>(`/cases/${id}`, { title, status }).subscribe({
       next: () => {
         this.savingEdit.set(false);
+        this.toast('Case updated');
         this.cancelEdit();
         this.loadCases();
       },
@@ -453,6 +650,7 @@ export class CasesPage {
         this.savingEdit.set(false);
         const msg = err?.error?.message ?? err?.message ?? 'Update failed';
         this.editError.set(msg);
+        this.toast('Update failed');
       },
     });
   }
