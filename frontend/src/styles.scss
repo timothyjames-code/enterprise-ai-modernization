@@ -30,4 +30,13 @@ body {
   height: 100%;
 }
 
-/* You can add additional global styles below */
+/* ✅ Optional: global vertical rhythm helpers (keeps pages looking “designed”) */
+* {
+  box-sizing: border-box;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+}

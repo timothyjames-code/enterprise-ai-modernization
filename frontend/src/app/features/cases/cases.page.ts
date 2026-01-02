@@ -15,6 +15,7 @@ import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatProgressBarModule } from '@angular/material/progress-bar';
 
 import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog.component';
 
@@ -60,48 +61,80 @@ const DEFAULT_STATUS = '';
     MatIconModule,
     MatDividerModule,
     MatTooltipModule,
+    MatProgressBarModule,
   ],
   styles: [
     `
       .page {
         max-width: 1100px;
         margin: 0 auto;
-        padding: 16px;
+        padding: 20px 16px 48px;
       }
 
       .header {
         display: flex;
-        align-items: baseline;
+        align-items: center;
         justify-content: space-between;
         gap: 16px;
         margin-bottom: 12px;
       }
 
+      .title {
+        margin: 0;
+        font-size: 28px;
+        line-height: 1.2;
+        letter-spacing: -0.2px;
+      }
+
       .subtitle {
+        margin-top: 4px;
         color: color-mix(in srgb, currentColor 65%, transparent);
       }
 
-      .toolbar {
-        display: flex;
-        gap: 12px;
-        align-items: center;
-        flex-wrap: wrap;
-        margin: 12px 0 16px;
+      .surface {
+        border-radius: 16px;
+        margin-top: 12px;
       }
 
+      /* ✅ Tighten overall surface padding */
+      .surfaceInner {
+        padding: 8px;
+      }
+
+      /* ✅ Sticky filters */
+      .sticky {
+        position: sticky;
+        top: 12px;
+        z-index: 10;
+      }
+
+      /* Only applied when scrolled */
+      .stickyShadow {
+        box-shadow: 0 10px 28px rgba(0, 0, 0, 0.08);
+      }
+
+      /* ✅ Make rows clean + aligned */
+      .toolbar,
       .createRow {
         display: flex;
         gap: 12px;
-        align-items: flex-start;
         flex-wrap: wrap;
-        margin: 12px 0 16px;
+        align-items: center;
+      }
+
+      /* ✅ Buttons match filled field height and sit cleanly */
+      .rowBtn {
+        height: 56px;
+        display: inline-flex;
+        align-items: center;
+        margin: 0;
       }
 
       .cards {
         display: grid;
         gap: 12px;
         grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-        margin-top: 12px;
+        margin-top: 14px;
       }
 
       .caseCard {
@@ -147,6 +180,8 @@ const DEFAULT_STATUS = '';
         display: flex;
         justify-content: flex-end;
         gap: 4px;
+        margin-left: auto;
+        margin-top: 2px;
       }
 
       .editRow {
@@ -164,113 +199,211 @@ const DEFAULT_STATUS = '';
       .danger {
         color: #b00020;
       }
+
+      .loadingBar {
+        margin-top: 8px;
+      }
+
+      .empty {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        padding: 8px;
+      }
+
+      .emptyIcon {
+        width: 44px;
+        height: 44px;
+        font-size: 44px;
+        color: color-mix(in srgb, currentColor 45%, transparent);
+      }
+
+      .emptyTitle {
+        font-weight: 600;
+      }
+
+      /* Error card */
+      .errorRow {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 6px 8px 10px;
+      }
+
+      /* ✅ Remove subscript space for fields where we do NOT need errors/hints */
+      :host ::ng-deep .noSub .mat-mdc-form-field-subscript-wrapper {
+        display: none !important;
+      }
+
+      /* ✅ Remove subscript space ONLY when there is no error (keeps alignment clean) */
+      :host ::ng-deep .noSubWhenNoError .mat-mdc-form-field-subscript-wrapper {
+        display: none !important;
+      }
+
+      /* Optional: tighten vertical rhythm inside cards */
+      :host ::ng-deep .mat-mdc-form-field {
+        margin: 0;
+      }
     `,
   ],
   template: `
     <div class="page">
       <div class="header">
         <div>
-          <h1 style="margin:0;">Cases</h1>
+          <h1 class="title">Cases</h1>
           <div class="subtitle" *ngIf="pageData() as p">
             Page {{ p.number + 1 }} / {{ p.totalPages || 1 }} • {{ p.totalElements }} total
           </div>
         </div>
       </div>
 
-      <!-- ✅ Material toolbar -->
-      <div class="toolbar">
-        <mat-form-field appearance="outline" style="min-width: 260px;">
-          <mat-label>Search</mat-label>
-          <input
-            matInput
-            placeholder="Search by title..."
-            [ngModel]="search()"
-            (ngModelChange)="onSearchChange($event)"
-          />
-        </mat-form-field>
+      <mat-progress-bar
+        *ngIf="loading()"
+        class="loadingBar"
+        mode="indeterminate"
+      ></mat-progress-bar>
 
-        <mat-form-field appearance="outline" style="min-width: 180px;">
-          <mat-label>Status</mat-label>
-          <mat-select [ngModel]="statusFilter()" (ngModelChange)="onStatusChange($event)">
-            <mat-option value="">All statuses</mat-option>
-            <mat-option value="Open">Open</mat-option>
-            <mat-option value="In Review">In Review</mat-option>
-            <mat-option value="Closed">Closed</mat-option>
-          </mat-select>
-        </mat-form-field>
+      <!-- ✅ Filters surface -->
+      <mat-card class="surface sticky" [class.stickyShadow]="filtersStuck()" appearance="raised">
+        <div class="surfaceInner">
+          <div class="toolbar">
+            <mat-form-field class="noSub" appearance="fill" style="min-width: 260px;">
+              <mat-label>Search</mat-label>
+              <input
+                matInput
+                placeholder="Search by title..."
+                [ngModel]="search()"
+                (ngModelChange)="onSearchChange($event)"
+              />
+            </mat-form-field>
 
-        <mat-form-field appearance="outline" style="min-width: 180px;">
-          <mat-label>Sort</mat-label>
-          <mat-select [ngModel]="sort()" (ngModelChange)="onSortChange($event)">
-            <mat-option value="createdAt,desc">Newest</mat-option>
-            <mat-option value="createdAt,asc">Oldest</mat-option>
-            <mat-option value="title,asc">Title A–Z</mat-option>
-            <mat-option value="title,desc">Title Z–A</mat-option>
-          </mat-select>
-        </mat-form-field>
+            <mat-form-field class="noSub" appearance="fill" style="min-width: 180px;">
+              <mat-label>Status</mat-label>
+              <mat-select [ngModel]="statusFilter()" (ngModelChange)="onStatusChange($event)">
+                <mat-option value="">All statuses</mat-option>
+                <mat-option value="Open">Open</mat-option>
+                <mat-option value="In Review">In Review</mat-option>
+                <mat-option value="Closed">Closed</mat-option>
+              </mat-select>
+            </mat-form-field>
 
-        <mat-form-field appearance="outline" style="width: 120px;">
-          <mat-label>Size</mat-label>
-          <mat-select [ngModel]="size()" (ngModelChange)="onSizeChange($event)">
-            <mat-option [value]="5">5</mat-option>
-            <mat-option [value]="10">10</mat-option>
-            <mat-option [value]="20">20</mat-option>
-          </mat-select>
-        </mat-form-field>
+            <mat-form-field class="noSub" appearance="fill" style="min-width: 180px;">
+              <mat-label>Sort</mat-label>
+              <mat-select [ngModel]="sort()" (ngModelChange)="onSortChange($event)">
+                <mat-option value="createdAt,desc">Newest</mat-option>
+                <mat-option value="createdAt,asc">Oldest</mat-option>
+                <mat-option value="title,asc">Title A–Z</mat-option>
+                <mat-option value="title,desc">Title Z–A</mat-option>
+              </mat-select>
+            </mat-form-field>
 
-        <button mat-stroked-button (click)="prevPage()" [disabled]="loading() || pageData()?.first">
-          Prev
-        </button>
-        <button mat-stroked-button (click)="nextPage()" [disabled]="loading() || pageData()?.last">
-          Next
-        </button>
-      </div>
+            <mat-form-field class="noSub" appearance="fill" style="width: 120px;">
+              <mat-label>Size</mat-label>
+              <mat-select [ngModel]="size()" (ngModelChange)="onSizeChange($event)">
+                <mat-option [value]="5">5</mat-option>
+                <mat-option [value]="10">10</mat-option>
+                <mat-option [value]="20">20</mat-option>
+              </mat-select>
+            </mat-form-field>
 
-      <mat-divider></mat-divider>
+            <button
+              class="rowBtn"
+              mat-stroked-button
+              (click)="prevPage()"
+              [disabled]="loading() || pageData()?.first"
+            >
+              Prev
+            </button>
+            <button
+              class="rowBtn"
+              mat-stroked-button
+              (click)="nextPage()"
+              [disabled]="loading() || pageData()?.last"
+            >
+              Next
+            </button>
 
-      <!-- ✅ Material Create form -->
-      <div class="createRow">
-        <mat-form-field appearance="outline" style="min-width: 320px; flex: 1 1 320px;">
-          <mat-label>Case title</mat-label>
-          <input
-            matInput
-            placeholder="Enter a title..."
-            [ngModel]="newTitle()"
-            (ngModelChange)="onTitleChange($event)"
-          />
-          <mat-error *ngIf="fieldErrors()['title']">
-            {{ fieldErrors()['title'] }}
-          </mat-error>
-        </mat-form-field>
+            <button
+              *ngIf="hasActiveFilters()"
+              class="rowBtn"
+              mat-button
+              (click)="clearFilters()"
+              [disabled]="loading()"
+            >
+              <mat-icon>close</mat-icon>
+              Clear
+            </button>
+          </div>
+        </div>
+      </mat-card>
 
-        <mat-form-field appearance="outline" style="min-width: 180px;">
-          <mat-label>Status</mat-label>
-          <mat-select [ngModel]="newStatus()" (ngModelChange)="newStatus.set($event)">
-            <mat-option value="Open">Open</mat-option>
-            <mat-option value="In Review">In Review</mat-option>
-            <mat-option value="Closed">Closed</mat-option>
-          </mat-select>
-        </mat-form-field>
+      <!-- ✅ Create surface -->
+      <mat-card class="surface" appearance="raised">
+        <div class="surfaceInner">
+          <div class="createRow">
+            <!-- ✅ Hide subscript ONLY when no error so title + status align -->
+            <mat-form-field
+              [class.noSubWhenNoError]="!fieldErrors()['title']"
+              appearance="fill"
+              style="min-width: 320px; flex: 1 1 320px;"
+            >
+              <mat-label>Case title</mat-label>
+              <input
+                matInput
+                placeholder="Enter a title..."
+                [ngModel]="newTitle()"
+                (ngModelChange)="onTitleChange($event)"
+              />
+              <mat-error *ngIf="fieldErrors()['title']">
+                {{ fieldErrors()['title'] }}
+              </mat-error>
+            </mat-form-field>
 
-        <button
-          mat-raised-button
-          color="primary"
-          (click)="createCase()"
-          [disabled]="creating() || !newTitle().trim()"
-          style="height: 56px;"
-        >
-          {{ creating() ? 'Adding...' : 'Add' }}
-        </button>
-      </div>
+            <mat-form-field class="noSub" appearance="fill" style="min-width: 180px;">
+              <mat-label>Status</mat-label>
+              <mat-select [ngModel]="newStatus()" (ngModelChange)="newStatus.set($event)">
+                <mat-option value="Open">Open</mat-option>
+                <mat-option value="In Review">In Review</mat-option>
+                <mat-option value="Closed">Closed</mat-option>
+              </mat-select>
+            </mat-form-field>
 
-      <p *ngIf="loading()" class="muted" style="margin: 16px 0;">Loading...</p>
-      <p *ngIf="error() as e" class="danger" style="margin: 16px 0;">{{ e }}</p>
+            <button
+              class="rowBtn"
+              mat-raised-button
+              color="primary"
+              (click)="createCase()"
+              [disabled]="creating() || !newTitle().trim()"
+            >
+              <mat-icon>add</mat-icon>
+              {{ creating() ? 'Adding...' : 'Add case' }}
+            </button>
+          </div>
+        </div>
+      </mat-card>
+
+      <!-- ✅ Inline error surface with retry -->
+      <mat-card *ngIf="error() as e" class="surface" appearance="raised">
+        <div class="errorRow">
+          <div class="danger">
+            <strong>Something went wrong.</strong>
+            <div class="muted" style="margin-top: 2px;">{{ e }}</div>
+          </div>
+
+          <button class="rowBtn" mat-stroked-button (click)="loadCases()" [disabled]="loading()">
+            <mat-icon>refresh</mat-icon>
+            Retry
+          </button>
+        </div>
+      </mat-card>
 
       <!-- ✅ Card List -->
       <div *ngIf="!loading() && !error()" class="cards">
-        <mat-card class="caseCard" appearance="outlined" *ngFor="let c of cases()">
+        <mat-card class="caseCard" appearance="raised" *ngFor="let c of cases()">
           <mat-card-header>
             <mat-card-title class="caseTitle">#{{ c.id }} — {{ c.title }}</mat-card-title>
+
             <mat-card-subtitle class="meta">
               <span class="badge" [attr.aria-label]="'Status: ' + c.status">
                 <span class="badgeDot" [style.background]="statusColor(c.status)"></span>
@@ -279,7 +412,7 @@ const DEFAULT_STATUS = '';
               <span>Created: {{ c.createdAt | date : 'medium' }}</span>
             </mat-card-subtitle>
 
-            <div class="cardActions" style="margin-left: auto;">
+            <div class="cardActions">
               <button
                 mat-icon-button
                 matTooltip="Edit"
@@ -304,14 +437,13 @@ const DEFAULT_STATUS = '';
           </mat-card-header>
 
           <mat-card-content>
-            <!-- Inline edit panel inside the card -->
             <div *ngIf="editingId() === c.id" class="editRow">
-              <mat-form-field appearance="outline" style="min-width: 280px; flex: 1 1 280px;">
+              <mat-form-field appearance="fill" style="min-width: 280px; flex: 1 1 280px;">
                 <mat-label>Title</mat-label>
                 <input matInput [ngModel]="editTitle()" (ngModelChange)="editTitle.set($event)" />
               </mat-form-field>
 
-              <mat-form-field appearance="outline" style="min-width: 180px;">
+              <mat-form-field class="noSub" appearance="fill" style="min-width: 180px;">
                 <mat-label>Status</mat-label>
                 <mat-select [ngModel]="editStatus()" (ngModelChange)="editStatus.set($event)">
                   <mat-option value="Open">Open</mat-option>
@@ -337,15 +469,23 @@ const DEFAULT_STATUS = '';
             </div>
           </mat-card-content>
         </mat-card>
-      </div>
 
-      <p
-        *ngIf="!loading() && !error() && cases().length === 0"
-        class="muted"
-        style="margin-top:16px;"
-      >
-        No cases found.
-      </p>
+        <!-- ✅ Empty state -->
+        <mat-card
+          *ngIf="cases().length === 0"
+          appearance="raised"
+          class="surface"
+          style="grid-column: 1 / -1;"
+        >
+          <div class="empty">
+            <mat-icon class="emptyIcon">inbox</mat-icon>
+            <div>
+              <div class="emptyTitle">No cases found</div>
+              <div class="muted">Try clearing filters or create a new case.</div>
+            </div>
+          </div>
+        </mat-card>
+      </div>
     </div>
   `,
 })
@@ -370,6 +510,9 @@ export class CasesPage {
 
   private syncingFromUrl = false;
 
+  // Sticky shadow only when page is scrolled
+  readonly filtersStuck = signal(false);
+
   // UI state
   readonly loading = signal(true);
   readonly error = signal<string | null>(null);
@@ -389,7 +532,14 @@ export class CasesPage {
   readonly editError = signal<string | null>(null);
 
   constructor() {
-    // URL -> state (refresh + back/forward)
+    window.addEventListener(
+      'scroll',
+      () => {
+        this.filtersStuck.set(window.scrollY > 8);
+      },
+      { passive: true }
+    );
+
     this.route.queryParamMap.subscribe((q) => {
       this.syncingFromUrl = true;
 
@@ -413,8 +563,27 @@ export class CasesPage {
     });
   }
 
+  hasActiveFilters(): boolean {
+    return (
+      this.page() !== DEFAULT_PAGE ||
+      this.size() !== DEFAULT_SIZE ||
+      this.sort() !== DEFAULT_SORT ||
+      this.search().trim().length > 0 ||
+      this.statusFilter().trim().length > 0
+    );
+  }
+
+  clearFilters() {
+    this.page.set(DEFAULT_PAGE);
+    this.size.set(DEFAULT_SIZE);
+    this.sort.set(DEFAULT_SORT);
+    this.search.set('');
+    this.statusFilter.set(DEFAULT_STATUS);
+    this.cancelEdit();
+    this.pushStateToUrl();
+  }
+
   statusColor(status: string): string {
-    // simple “modern” dot color that plays fine with M3 themes
     switch ((status ?? '').toLowerCase()) {
       case 'open':
         return '#2e7d32';
@@ -446,7 +615,6 @@ export class CasesPage {
     const size = this.size();
     const sort = this.sort();
 
-    // clean URL: omit defaults
     const queryParams: Record<string, any> = {
       page: page !== DEFAULT_PAGE ? page : null,
       size: size !== DEFAULT_SIZE ? size : null,
@@ -513,7 +681,7 @@ export class CasesPage {
     }
   }
 
-  private loadCases() {
+  loadCases() {
     this.loading.set(true);
     this.error.set(null);
 
