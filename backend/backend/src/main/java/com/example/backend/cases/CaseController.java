@@ -11,6 +11,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.Instant;
+
 @RestController
 @RequestMapping("/api/cases")
 public class CaseController {
@@ -42,15 +44,15 @@ public class CaseController {
 
     Page<CaseEntity> page;
 
-  if (hasSearch && hasStatus) {
-  page = repository.findByTitleContainingIgnoreCaseAndStatusContainingIgnoreCase(s, st, pageable);
-} else if (hasSearch) {
-  page = repository.findByTitleContainingIgnoreCase(s, pageable);
-} else if (hasStatus) {
-  page = repository.findByStatusContainingIgnoreCase(st, pageable);
-} else {
-  page = repository.findAll(pageable);
-}
+    if (hasSearch && hasStatus) {
+      page = repository.findByTitleContainingIgnoreCaseAndStatusContainingIgnoreCase(s, st, pageable);
+    } else if (hasSearch) {
+      page = repository.findByTitleContainingIgnoreCase(s, pageable);
+    } else if (hasStatus) {
+      page = repository.findByStatusContainingIgnoreCase(st, pageable);
+    } else {
+      page = repository.findAll(pageable);
+    }
 
     return page.map(CaseDto::fromEntity);
   }
@@ -62,7 +64,10 @@ public class CaseController {
         ? "Open"
         : req.status().trim();
 
-    var saved = repository.save(new CaseEntity(title, status));
+    var entity = new CaseEntity(title, status);
+    entity.setUpdatedAt(Instant.now()); // ✅ keep consistent with createdAt initialization
+
+    var saved = repository.save(entity);
     return CaseDto.fromEntity(saved);
   }
 
@@ -71,16 +76,28 @@ public class CaseController {
     var existing = repository.findById(id).orElse(null);
     if (existing == null) return ResponseEntity.notFound().build();
 
+    boolean changed = false;
+
     if (req.title() != null) {
       var title = req.title().trim();
       if (title.isBlank()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "title is required");
-      existing.setTitle(title);
+      if (!title.equals(existing.getTitle())) {
+        existing.setTitle(title);
+        changed = true;
+      }
     }
 
     if (req.status() != null) {
       var status = req.status().trim();
       if (status.isBlank()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "status is required");
-      existing.setStatus(status);
+      if (!status.equals(existing.getStatus())) {
+        existing.setStatus(status);
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      existing.setUpdatedAt(Instant.now()); // ✅ critical for staleness / audit
     }
 
     var saved = repository.save(existing);

@@ -26,4 +26,20 @@ public class CaseActivityController {
   public void addNote(@PathVariable Long caseId, @Valid @RequestBody CreateNoteRequest req) {
     activityService.addNote(caseId, req);
   }
+
+  // ✅ Edit note
+  @PutMapping("/{caseId}/notes/{noteId}")
+  public void updateNote(
+      @PathVariable Long caseId,
+      @PathVariable Long noteId,
+      @Valid @RequestBody CreateNoteRequest req
+  ) {
+    activityService.updateNote(caseId, noteId, req);
+  }
+
+  // ✅ Optional: Delete note
+  @DeleteMapping("/{caseId}/notes/{noteId}")
+  public void deleteNote(@PathVariable Long caseId, @PathVariable Long noteId) {
+    activityService.deleteNote(caseId, noteId);
+  }
 }

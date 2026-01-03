@@ -20,6 +20,14 @@ public class CaseEntity {
   @Column(nullable = false)
   private Instant createdAt = Instant.now();
 
+  // ✅ NEW: used for staleness + audit (touch this when notes/events change)
+  @Column(nullable = false)
+  private Instant updatedAt = Instant.now();
+
+  // ✅ NEW: official accepted summary (human-approved)
+  @Column(columnDefinition = "TEXT")
+  private String summaryText;
+
   public CaseEntity() {}
 
   public CaseEntity(String title, String status) {
@@ -28,6 +36,7 @@ public class CaseEntity {
   }
 
   public Long getId() { return id; }
+
   public String getTitle() { return title; }
   public void setTitle(String title) { this.title = title; }
 
@@ -36,4 +45,11 @@ public class CaseEntity {
 
   public Instant getCreatedAt() { return createdAt; }
   public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
+
+  // ✅ NEW getters/setters
+  public Instant getUpdatedAt() { return updatedAt; }
+  public void setUpdatedAt(Instant updatedAt) { this.updatedAt = updatedAt; }
+
+  public String getSummaryText() { return summaryText; }
+  public void setSummaryText(String summaryText) { this.summaryText = summaryText; }
 }

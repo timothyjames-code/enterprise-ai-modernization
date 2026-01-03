@@ -2,13 +2,14 @@ package com.example.backend.cases;
 
 import com.example.backend.cases.dto.ActivityItemDto;
 import com.example.backend.cases.dto.CreateNoteRequest;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
+import java.time.Instant;
+import java.util.*;
 
 @Service
 public class CaseActivityService {
@@ -16,6 +17,7 @@ public class CaseActivityService {
   private final CaseRepository caseRepository;
   private final CaseNoteRepository noteRepository;
   private final CaseEventRepository eventRepository;
+  private final ObjectMapper objectMapper = new ObjectMapper();
 
   public CaseActivityService(
       CaseRepository caseRepository,
@@ -29,7 +31,6 @@ public class CaseActivityService {
 
   @Transactional(readOnly = true)
   public List<ActivityItemDto> getActivity(Long caseId) {
-    // Ensure case exists
     if (!caseRepository.existsById(caseId)) {
       throw new EntityNotFoundException("Case not found: " + caseId);
     }
@@ -57,7 +58,6 @@ public class CaseActivityService {
       ));
     }
 
-    // Sort newest-first
     out.sort(Comparator.comparing((ActivityItemDto x) -> x.createdAt).reversed());
     return out;
   }
@@ -72,12 +72,47 @@ public class CaseActivityService {
     note.setBody(req.body.trim());
     noteRepository.save(note);
 
-    CaseEvent ev = new CaseEvent();
-    ev.setTheCase(c);
-    ev.setType(EventType.NOTE_ADDED);
-    ev.setMessage("Note added");
-    ev.setPayloadJson(null);
-    eventRepository.save(ev);
+    recordEvent(c, EventType.NOTE_ADDED, "Note added", null);
+    touchCase(c);
+  }
+
+  @Transactional
+  public void updateNote(Long caseId, Long noteId, CreateNoteRequest req) {
+    CaseEntity c = caseRepository.findById(caseId)
+        .orElseThrow(() -> new EntityNotFoundException("Case not found: " + caseId));
+
+    CaseNote note = noteRepository.findByIdAndTheCaseId(noteId, caseId)
+        .orElseThrow(() -> new EntityNotFoundException("Note not found: " + noteId + " for case " + caseId));
+
+    note.setBody(req.body.trim());
+    noteRepository.save(note);
+
+    recordEvent(
+        c,
+        EventType.NOTE_UPDATED,
+        "Note updated",
+        jsonPayload(Map.of("noteId", noteId))
+    );
+    touchCase(c);
+  }
+
+  @Transactional
+  public void deleteNote(Long caseId, Long noteId) {
+    CaseEntity c = caseRepository.findById(caseId)
+        .orElseThrow(() -> new EntityNotFoundException("Case not found: " + caseId));
+
+    CaseNote note = noteRepository.findByIdAndTheCaseId(noteId, caseId)
+        .orElseThrow(() -> new EntityNotFoundException("Note not found: " + noteId + " for case " + caseId));
+
+    noteRepository.delete(note);
+
+    recordEvent(
+        c,
+        EventType.NOTE_DELETED,
+        "Note deleted",
+        jsonPayload(Map.of("noteId", noteId))
+    );
+    touchCase(c);
   }
 
   @Transactional
@@ -88,5 +123,23 @@ public class CaseActivityService {
     ev.setMessage(message);
     ev.setPayloadJson(payloadJson);
     eventRepository.save(ev);
+  }
+
+  // --- helpers ---
+
+  private void touchCase(CaseEntity c) {
+    // Requires CaseEntity to have updatedAt + setter
+    c.setUpdatedAt(Instant.now());
+    caseRepository.save(c);
+  }
+
+  private String jsonPayload(Map<String, Object> payload) {
+    if (payload == null) return null;
+    try {
+      return objectMapper.writeValueAsString(payload);
+    } catch (JsonProcessingException e) {
+      // Fallback: don't block the business action because payload JSON failed
+      return null;
+    }
   }
 }
