@@ -17,16 +17,18 @@ public class CaseActivityService {
   private final CaseRepository caseRepository;
   private final CaseNoteRepository noteRepository;
   private final CaseEventRepository eventRepository;
-  private final ObjectMapper objectMapper = new ObjectMapper();
+  private final ObjectMapper objectMapper;
 
   public CaseActivityService(
       CaseRepository caseRepository,
       CaseNoteRepository noteRepository,
-      CaseEventRepository eventRepository
+      CaseEventRepository eventRepository,
+      ObjectMapper objectMapper
   ) {
     this.caseRepository = caseRepository;
     this.noteRepository = noteRepository;
     this.eventRepository = eventRepository;
+    this.objectMapper = objectMapper;
   }
 
   @Transactional(readOnly = true)
@@ -128,7 +130,6 @@ public class CaseActivityService {
   // --- helpers ---
 
   private void touchCase(CaseEntity c) {
-    // Requires CaseEntity to have updatedAt + setter
     c.setUpdatedAt(Instant.now());
     caseRepository.save(c);
   }
@@ -138,7 +139,6 @@ public class CaseActivityService {
     try {
       return objectMapper.writeValueAsString(payload);
     } catch (JsonProcessingException e) {
-      // Fallback: don't block the business action because payload JSON failed
       return null;
     }
   }

@@ -178,6 +178,7 @@ const DEFAULT_STATUS = '';
         mode="over"
         [opened]="activity.drawerOpen()"
         (closedStart)="activity.onDrawerClosed()"
+        [style.width]="'min(550px, 96vw)'"
       >
         <app-case-activity-panel
           [caseId]="activity.selectedCaseId()"

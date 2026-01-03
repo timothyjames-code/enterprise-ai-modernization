@@ -1,4 +1,4 @@
-import { Component, Input } from '@angular/core';
+import { Component, Input, inject } from '@angular/core';
 import { NgFor, NgIf } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 
@@ -10,7 +10,19 @@ import { MatInputModule } from '@angular/material/input';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
+import { MatCardModule } from '@angular/material/card';
+import { MatCheckboxModule } from '@angular/material/checkbox';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+
 import { ActivityItemDto, CaseActivityStore } from '../data/case-activity.store';
+import { CaseSummaryStore } from '../data/case-summary.store';
+
+import {
+  RejectSummaryDialogComponent,
+  RejectSummaryDialogResult,
+} from '../../cases/components/reject-summary-dialog.component'; // ✅ adjust path if needed
+
+import { ConfirmDialogComponent } from '../../../shared/components/confirm-dialog.component'; // ✅ adjust path if needed
 
 @Component({
   selector: 'app-case-activity-panel',
@@ -19,6 +31,7 @@ import { ActivityItemDto, CaseActivityStore } from '../data/case-activity.store'
     NgIf,
     NgFor,
     FormsModule,
+
     MatButtonModule,
     MatDividerModule,
     MatFormFieldModule,
@@ -26,12 +39,18 @@ import { ActivityItemDto, CaseActivityStore } from '../data/case-activity.store'
     MatInputModule,
     MatProgressBarModule,
     MatTooltipModule,
+
+    MatCardModule,
+    MatCheckboxModule,
+
+    // ✅ needed for MatDialog.open in standalone
+    MatDialogModule,
   ],
   styles: [
     `
       .drawerPanel {
-        width: min(420px, 92vw);
-        padding: 12px;
+        width: min(560px, 96vw);
+        padding: 16px;
       }
 
       .drawerHeader {
@@ -79,6 +98,46 @@ import { ActivityItemDto, CaseActivityStore } from '../data/case-activity.store'
         color: color-mix(in srgb, currentColor 65%, transparent);
       }
 
+      /* ---- Summary UI ---- */
+      .summarySection {
+        margin-top: 10px;
+        display: grid;
+        gap: 10px;
+      }
+
+      .summaryCard {
+        padding: 12px;
+        border-radius: 14px;
+      }
+
+      .summaryTitleRow {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .summaryText {
+        white-space: pre-wrap;
+        word-break: break-word;
+        line-height: 1.35;
+      }
+
+      .summaryActions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 12px;
+      }
+
+      .warnBox {
+        padding: 10px;
+        border-radius: 12px;
+        background: color-mix(in srgb, #f59e0b 12%, transparent);
+        margin-top: 10px;
+      }
+
+      /* ---- Activity UI ---- */
       .activityList {
         display: grid;
         gap: 10px;
@@ -140,11 +199,12 @@ import { ActivityItemDto, CaseActivityStore } from '../data/case-activity.store'
         word-break: break-word;
       }
 
+      /* ✅ FIX: put actions on their own row so they never clip */
       .noteHeaderActions {
-        margin-left: auto;
-        display: inline-flex;
-        align-items: center;
+        display: flex;
+        justify-content: flex-end;
         gap: 4px;
+        margin-top: 4px;
       }
 
       .noteRow {
@@ -203,6 +263,128 @@ import { ActivityItemDto, CaseActivityStore } from '../data/case-activity.store'
 
       <mat-progress-bar *ngIf="store.isLoading(caseId)" mode="indeterminate"></mat-progress-bar>
 
+      <!-- Summary (review-first) -->
+      <div class="summarySection">
+        <!-- Official summary -->
+        <mat-card class="summaryCard">
+          <div class="summaryTitleRow">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <mat-icon>summarize</mat-icon>
+              <div style="font-weight:700;">Summary</div>
+            </div>
+
+            <button
+              mat-stroked-button
+              (click)="summary.createDraft(caseId!)"
+              [disabled]="summary.isCreating(caseId!)"
+            >
+              <mat-icon>auto_awesome</mat-icon>
+              {{ summary.isCreating(caseId!) ? 'Generating…' : 'Generate draft' }}
+            </button>
+          </div>
+
+          <div class="drawerSub" style="margin-top:6px;">
+            Last updated:
+            {{ summary.officialSummaryOverride(caseId!)?.updatedAt ?? caseUpdatedAt ?? '—' }}
+          </div>
+
+          <div
+            class="muted"
+            style="margin-top:10px;"
+            *ngIf="!(summary.officialSummaryOverride(caseId!)?.summaryText ?? caseSummaryText)"
+          >
+            No approved summary yet.
+          </div>
+
+          <div
+            class="summaryText"
+            style="margin-top:10px;"
+            *ngIf="summary.officialSummaryOverride(caseId!)?.summaryText ?? caseSummaryText as txt"
+          >
+            {{ txt }}
+          </div>
+        </mat-card>
+
+        <!-- Draft review -->
+        <mat-card class="summaryCard" *ngIf="summary.draft(caseId!) as d">
+          <div class="summaryTitleRow">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <mat-icon>rate_review</mat-icon>
+              <div style="font-weight:700;">Draft review</div>
+            </div>
+
+            <button
+              mat-button
+              (click)="summary.loadDraft(caseId!, d.draftId)"
+              [disabled]="summary.isLoading(caseId!)"
+            >
+              <mat-icon>refresh</mat-icon>
+              Refresh draft
+            </button>
+          </div>
+
+          <mat-progress-bar
+            *ngIf="summary.isLoading(caseId!)"
+            mode="indeterminate"
+          ></mat-progress-bar>
+
+          <div class="warnBox" *ngIf="d.stale">
+            <div style="font-weight:700; display:flex; align-items:center; gap:8px;">
+              <mat-icon>warning</mat-icon>
+              This draft may be stale
+            </div>
+            <div class="drawerSub" style="margin-top:4px;">
+              The case changed after the draft was generated. Regenerate, or acknowledge and accept.
+            </div>
+
+            <mat-checkbox
+              style="margin-top:8px;"
+              [ngModel]="summary.ackStale(caseId!)"
+              (ngModelChange)="summary.setAckStale(caseId!, $event)"
+            >
+              I understand and want to accept anyway
+            </mat-checkbox>
+          </div>
+
+          <div class="summaryText" style="margin-top:10px;">
+            {{ d.contentText }}
+          </div>
+
+          <div class="summaryActions">
+            <button
+              mat-raised-button
+              color="primary"
+              (click)="summary.acceptDraft(caseId!, d.draftId)"
+              [disabled]="
+                summary.isAccepting(caseId!, d.draftId) || (d.stale && !summary.ackStale(caseId!))
+              "
+            >
+              <mat-icon>check</mat-icon>
+              {{ summary.isAccepting(caseId!, d.draftId) ? 'Accepting…' : 'Accept' }}
+            </button>
+
+            <button
+              mat-stroked-button
+              (click)="summary.createDraft(caseId!)"
+              [disabled]="summary.isCreating(caseId!)"
+            >
+              <mat-icon>autorenew</mat-icon>
+              Regenerate
+            </button>
+
+            <button
+              mat-button
+              color="warn"
+              (click)="confirmReject(caseId!, d.draftId)"
+              [disabled]="summary.isRejecting(caseId!, d.draftId)"
+            >
+              <mat-icon>close</mat-icon>
+              {{ summary.isRejecting(caseId!, d.draftId) ? 'Rejecting…' : 'Reject' }}
+            </button>
+          </div>
+        </mat-card>
+      </div>
+
       <!-- Add note -->
       <div class="noteRow">
         <mat-form-field appearance="fill" style="flex: 1 1 320px; min-width: 280px;">
@@ -247,57 +429,58 @@ import { ActivityItemDto, CaseActivityStore } from '../data/case-activity.store'
           <mat-icon class="activityIcon">{{ store.activityIcon(a) }}</mat-icon>
 
           <div>
+            <!-- meta row -->
             <div class="activityTop">
               <span class="activityTypePill">{{ store.activityTypeLabel(a) }}</span>
               <span class="activityTime" *ngIf="store.activityTime(a) as t">{{ t }}</span>
               <span class="activityTime" *ngIf="store.activityActor(a) as who">• {{ who }}</span>
-
-              <!-- NOTE actions -->
-              <div class="noteHeaderActions" *ngIf="store.isNote(a) && a.id != null">
-                <button
-                  mat-icon-button
-                  matTooltip="Expand"
-                  (click)="store.toggleNoteExpanded(caseId!, a.id!)"
-                  [disabled]="
-                    store.isNoteSaving(caseId!, a.id!) || store.isNoteDeleting(caseId!, a.id!)
-                  "
-                  aria-label="Toggle note"
-                >
-                  <mat-icon>{{
-                    store.isNoteExpanded(caseId!, a.id!) ? 'expand_less' : 'expand_more'
-                  }}</mat-icon>
-                </button>
-
-                <button
-                  mat-icon-button
-                  matTooltip="Edit"
-                  (click)="store.startEditNote(caseId!, a)"
-                  [disabled]="
-                    store.isNoteSaving(caseId!, a.id!) || store.isNoteDeleting(caseId!, a.id!)
-                  "
-                  aria-label="Edit note"
-                >
-                  <mat-icon>edit</mat-icon>
-                </button>
-
-                <button
-                  mat-icon-button
-                  color="warn"
-                  matTooltip="Delete"
-                  (click)="confirmDelete(caseId!, a.id!)"
-                  [disabled]="
-                    store.isNoteSaving(caseId!, a.id!) || store.isNoteDeleting(caseId!, a.id!)
-                  "
-                  aria-label="Delete note"
-                >
-                  <mat-icon>{{
-                    store.isNoteDeleting(caseId!, a.id!) ? 'hourglass_top' : 'delete'
-                  }}</mat-icon>
-                </button>
-              </div>
             </div>
 
-            <!-- Preview -->
+            <!-- ✅ actions row (no clipping) -->
+            <div class="noteHeaderActions" *ngIf="store.isNote(a) && a.id != null">
+              <button
+                mat-icon-button
+                matTooltip="Expand"
+                (click)="store.toggleNoteExpanded(caseId!, a.id!)"
+                [disabled]="
+                  store.isNoteSaving(caseId!, a.id!) || store.isNoteDeleting(caseId!, a.id!)
+                "
+                aria-label="Toggle note"
+              >
+                <mat-icon>{{
+                  store.isNoteExpanded(caseId!, a.id!) ? 'expand_less' : 'expand_more'
+                }}</mat-icon>
+              </button>
+
+              <button
+                mat-icon-button
+                matTooltip="Edit"
+                (click)="store.startEditNote(caseId!, a)"
+                [disabled]="
+                  store.isNoteSaving(caseId!, a.id!) || store.isNoteDeleting(caseId!, a.id!)
+                "
+                aria-label="Edit note"
+              >
+                <mat-icon>edit</mat-icon>
+              </button>
+
+              <button
+                mat-icon-button
+                color="warn"
+                matTooltip="Delete"
+                (click)="confirmDelete(caseId!, a.id!)"
+                [disabled]="
+                  store.isNoteSaving(caseId!, a.id!) || store.isNoteDeleting(caseId!, a.id!)
+                "
+                aria-label="Delete note"
+              >
+                <mat-icon>{{
+                  store.isNoteDeleting(caseId!, a.id!) ? 'hourglass_top' : 'delete'
+                }}</mat-icon>
+              </button>
+            </div>
+
+            <!-- NOTE preview -->
             <div class="preview" *ngIf="store.isNote(a) && !store.isNoteExpanded(caseId!, a.id!)">
               {{ store.activityBody(a) }}
             </div>
@@ -374,15 +557,47 @@ import { ActivityItemDto, CaseActivityStore } from '../data/case-activity.store'
   `,
 })
 export class CaseActivityPanelComponent {
+  private readonly dialog = inject(MatDialog);
+
   @Input() caseId: number | null = null;
   @Input() caseTitle: string | null = null;
   @Input() items: ActivityItemDto[] = [];
+  @Input() caseSummaryText: string | null = null;
+  @Input() caseUpdatedAt: string | null = null;
 
-  constructor(public readonly store: CaseActivityStore) {}
+  constructor(
+    public readonly store: CaseActivityStore,
+    public readonly summary: CaseSummaryStore
+  ) {}
 
   confirmDelete(caseId: number, noteId: number) {
-    const ok = window.confirm('Delete this note? This cannot be undone.');
-    if (!ok) return;
-    this.store.deleteNote(caseId, noteId);
+    this.dialog
+      .open(ConfirmDialogComponent, {
+        width: '360px',
+        data: {
+          title: 'Delete note',
+          message: `Delete this note? This can't be undone.`,
+          confirmText: 'Delete',
+          cancelText: 'Cancel',
+        },
+      })
+      .afterClosed()
+      .subscribe((confirmed) => {
+        if (!confirmed) return;
+        this.store.deleteNote(caseId, noteId);
+      });
+  }
+
+  confirmReject(caseId: number, draftId: number) {
+    this.dialog
+      .open(RejectSummaryDialogComponent, {
+        width: '520px',
+        data: { defaultReasonCode: 'INACCURATE' },
+      })
+      .afterClosed()
+      .subscribe((res: RejectSummaryDialogResult | null) => {
+        if (!res) return;
+        this.summary.rejectDraft(caseId, draftId, res.reasonCode, res.comment);
+      });
   }
 }

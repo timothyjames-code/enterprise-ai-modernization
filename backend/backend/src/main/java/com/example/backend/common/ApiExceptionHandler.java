@@ -1,13 +1,13 @@
 package com.example.backend.common;
 
+import jakarta.persistence.EntityNotFoundException;
 import jakarta.validation.ConstraintViolationException;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
-
-// Spring 6.1+ (Boot 3.2+/4.x) may throw this for method validation
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
 
 import java.util.HashMap;
@@ -31,7 +31,6 @@ public class ApiExceptionHandler {
 
   @ExceptionHandler(HandlerMethodValidationException.class)
   public ResponseEntity<Map<String, Object>> handleMethodValidation(HandlerMethodValidationException ex) {
-    // This exception structure is different; simplest reliable output:
     return ResponseEntity.badRequest().body(Map.of(
         "message", "Validation failed",
         "errors", Map.of("request", "Invalid request")
@@ -46,10 +45,17 @@ public class ApiExceptionHandler {
     ));
   }
 
-  // Optional: if you throw IllegalArgumentException anywhere, make it a 400 not a 500
   @ExceptionHandler(IllegalArgumentException.class)
   public ResponseEntity<Map<String, Object>> handleIllegalArgument(IllegalArgumentException ex) {
     return ResponseEntity.badRequest().body(Map.of(
+        "message", ex.getMessage()
+    ));
+  }
+
+  // ✅ NEW: map missing entities to 404 instead of 500
+  @ExceptionHandler(EntityNotFoundException.class)
+  public ResponseEntity<Map<String, Object>> handleNotFound(EntityNotFoundException ex) {
+    return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of(
         "message", ex.getMessage()
     ));
   }

@@ -57,6 +57,14 @@ public class CaseController {
     return page.map(CaseDto::fromEntity);
   }
 
+  // ✅ NEW: GET /api/cases/{id}
+  @GetMapping("/{id}")
+  public CaseDto getOne(@PathVariable Long id) {
+    return repository.findById(id)
+        .map(CaseDto::fromEntity)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Case not found"));
+  }
+
   @PostMapping
   public CaseDto create(@Valid @RequestBody CreateCaseRequest req) {
     var title = req.title().trim();

@@ -22,7 +22,7 @@ public class CaseSummaryDraftController {
   @ResponseStatus(HttpStatus.ACCEPTED)
   public CaseSummaryDraftService.CreateDraftResponse create(
       @PathVariable Long caseId,
-      @Valid @RequestBody(required = false) CreateSummaryDraftRequest req
+      @RequestBody(required = false) CreateSummaryDraftRequest req
   ) {
     return service.createDraft(caseId, req);
   }
