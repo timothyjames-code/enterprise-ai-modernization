@@ -49,9 +49,10 @@ public class CaseSummaryDraftService {
         ? req.purpose
         : SummaryPurpose.INTERNAL_CASE_OVERVIEW;
 
-    // Supersede existing active drafts for this purpose
+    // Supersede existing active drafts
     for (CaseSummaryDraft d :
         draftRepository.findByTheCaseIdAndPurposeAndStatus(caseId, purpose, DraftStatus.DRAFT)) {
+
       d.setStatus(DraftStatus.SUPERSEDED);
       draftRepository.save(d);
 
@@ -65,7 +66,7 @@ public class CaseSummaryDraftService {
       );
     }
 
-    // Snapshot inputs (server-owned)
+    // Snapshot inputs
     var notes = noteRepository.findByTheCaseIdOrderByCreatedAtDesc(caseId)
         .stream().limit(NOTES_LIMIT).toList();
     var events = eventRepository.findByTheCaseIdOrderByCreatedAtDesc(caseId)
@@ -79,14 +80,28 @@ public class CaseSummaryDraftService {
         "|notes=" + notes.size() +
         "|events=" + events.size();
 
-    String fingerprint = AuditHashing.sha256Hex(snapshotText);
+    String inputFingerprint = AuditHashing.sha256Hex(snapshotText);
 
-    // Stub summary (AI will replace this later)
+    // Stub summary (AI will replace later)
     String draftText =
-        "Draft summary (stub): Case \"" + safe(c.getTitle()) + "\" is currently \"" +
-        safe(c.getStatus()) + "\". Based on " + notes.size() +
+        "Draft summary (stub): Case \"" + safe(c.getTitle()) +
+        "\" is currently \"" + safe(c.getStatus()) +
+        "\". Based on " + notes.size() +
         " recent notes and " + events.size() +
         " recent events as of " + c.getUpdatedAt() + ".";
+
+    // ----- ADR-0001 provenance (stubbed but complete) -----
+
+    String promptTemplateId = "internal-case-overview";
+    int promptTemplateVersion = 1;
+
+    String renderedPromptStub =
+        "purpose=" + purpose.name() +
+        "|caseId=" + c.getId() +
+        "|title=" + safe(c.getTitle()) +
+        "|status=" + safe(c.getStatus()) +
+        "|notesCount=" + notes.size() +
+        "|eventsCount=" + events.size();
 
     CaseSummaryDraft draft = new CaseSummaryDraft();
     draft.setTheCase(c);
@@ -94,8 +109,22 @@ public class CaseSummaryDraftService {
     draft.setStatus(DraftStatus.DRAFT);
     draft.setGenerationStatus(GenerationStatus.COMPLETED);
     draft.setSourceUpdatedAt(c.getUpdatedAt());
-    draft.setInputFingerprint(fingerprint);
+    draft.setInputFingerprint(inputFingerprint);
+
+    draft.setPromptTemplateId(promptTemplateId);
+    draft.setPromptTemplateVersion(promptTemplateVersion);
+    draft.setPromptHash(AuditHashing.sha256Hex(renderedPromptStub));
+
+    draft.setModelProvider("LEGACY");
+    draft.setModelId("STUB");
+    draft.setModelConfigJson("{\"temperature\":0}");
+    draft.setGenerationPolicyVersion("v1");
+
     draft.setContentText(draftText);
+    draft.setOutputHash(AuditHashing.sha256Hex(draftText));
+    draft.setCreatedBy("case-service");
+    draft.setCorrelationId(null);
+
     draft.setCreatedAt(Instant.now());
     draft.setExpiresAt(Instant.now().plus(7, ChronoUnit.DAYS));
 

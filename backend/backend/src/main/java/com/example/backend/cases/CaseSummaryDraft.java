@@ -34,6 +34,45 @@ public class CaseSummaryDraft {
   @Column(nullable = false, length = 128)
   private String inputFingerprint;
 
+  // =========================
+  // ADR-0001: Generation provenance (immutable after creation)
+  // =========================
+
+  @Column(nullable = false, length = 120)
+  private String promptTemplateId;
+
+  @Column(nullable = false)
+  private Integer promptTemplateVersion;
+
+  // SHA-256 hex (64 chars)
+  @Column(nullable = false, length = 64)
+  private String promptHash;
+
+  @Column(nullable = false, length = 40)
+  private String modelProvider; // LEGACY / OPENAI / AZURE_OPENAI
+
+  @Column(nullable = false, length = 120)
+  private String modelId;
+
+  @Column(columnDefinition = "TEXT")
+  private String modelConfigJson;
+
+  @Column(nullable = false, length = 50)
+  private String generationPolicyVersion;
+
+  // SHA-256 hex (64 chars) of contentText
+  @Column(nullable = false, length = 64)
+  private String outputHash;
+
+  // system principal (service identity)
+  @Column(nullable = false, length = 200)
+  private String createdBy;
+
+  @Column(length = 80)
+  private String correlationId;
+
+  // =========================
+
   @Column(columnDefinition = "TEXT")
   private String contentText;
 
@@ -67,6 +106,36 @@ public class CaseSummaryDraft {
 
   public String getInputFingerprint() { return inputFingerprint; }
   public void setInputFingerprint(String inputFingerprint) { this.inputFingerprint = inputFingerprint; }
+
+  public String getPromptTemplateId() { return promptTemplateId; }
+  public void setPromptTemplateId(String promptTemplateId) { this.promptTemplateId = promptTemplateId; }
+
+  public Integer getPromptTemplateVersion() { return promptTemplateVersion; }
+  public void setPromptTemplateVersion(Integer promptTemplateVersion) { this.promptTemplateVersion = promptTemplateVersion; }
+
+  public String getPromptHash() { return promptHash; }
+  public void setPromptHash(String promptHash) { this.promptHash = promptHash; }
+
+  public String getModelProvider() { return modelProvider; }
+  public void setModelProvider(String modelProvider) { this.modelProvider = modelProvider; }
+
+  public String getModelId() { return modelId; }
+  public void setModelId(String modelId) { this.modelId = modelId; }
+
+  public String getModelConfigJson() { return modelConfigJson; }
+  public void setModelConfigJson(String modelConfigJson) { this.modelConfigJson = modelConfigJson; }
+
+  public String getGenerationPolicyVersion() { return generationPolicyVersion; }
+  public void setGenerationPolicyVersion(String generationPolicyVersion) { this.generationPolicyVersion = generationPolicyVersion; }
+
+  public String getOutputHash() { return outputHash; }
+  public void setOutputHash(String outputHash) { this.outputHash = outputHash; }
+
+  public String getCreatedBy() { return createdBy; }
+  public void setCreatedBy(String createdBy) { this.createdBy = createdBy; }
+
+  public String getCorrelationId() { return correlationId; }
+  public void setCorrelationId(String correlationId) { this.correlationId = correlationId; }
 
   public String getContentText() { return contentText; }
   public void setContentText(String contentText) { this.contentText = contentText; }
