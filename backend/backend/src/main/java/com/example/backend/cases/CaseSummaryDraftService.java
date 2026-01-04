@@ -1,5 +1,7 @@
 package com.example.backend.cases;
 
+import com.example.backend.ai.*;
+import com.example.backend.ai.PromptTemplates.PromptTemplate;
 import com.example.backend.cases.dto.*;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.http.HttpStatus;
@@ -9,6 +11,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.Map;
 
 @Service
 public class CaseSummaryDraftService {
@@ -21,19 +24,22 @@ public class CaseSummaryDraftService {
   private final CaseEventRepository eventRepository;
   private final CaseSummaryDraftRepository draftRepository;
   private final CaseAuditService auditService;
+  private final AiTextGenerator ai;
 
   public CaseSummaryDraftService(
       CaseRepository caseRepository,
       CaseNoteRepository noteRepository,
       CaseEventRepository eventRepository,
       CaseSummaryDraftRepository draftRepository,
-      CaseAuditService auditService
+      CaseAuditService auditService,
+      AiTextGenerator ai
   ) {
     this.caseRepository = caseRepository;
     this.noteRepository = noteRepository;
     this.eventRepository = eventRepository;
     this.draftRepository = draftRepository;
     this.auditService = auditService;
+    this.ai = ai;
   }
 
   // =========================================================
@@ -82,46 +88,70 @@ public class CaseSummaryDraftService {
 
     String inputFingerprint = AuditHashing.sha256Hex(snapshotText);
 
-    // Stub summary (AI will replace later)
-    String draftText =
-        "Draft summary (stub): Case \"" + safe(c.getTitle()) +
-        "\" is currently \"" + safe(c.getStatus()) +
-        "\". Based on " + notes.size() +
-        " recent notes and " + events.size() +
-        " recent events as of " + c.getUpdatedAt() + ".";
+    // =========================
+    // Prompt (server-owned) + AI generation (FAKE provider)
+    // =========================
 
-    // ----- ADR-0001 provenance (stubbed but complete) -----
+    PromptTemplate template = PromptTemplates.resolve("case-summary-internal");
 
-    String promptTemplateId = "internal-case-overview";
-    int promptTemplateVersion = 1;
+    String notesText = notes.stream()
+        .map(n -> "- [" + n.getCreatedAt() + "] " + safe(n.getBody()))
+        .reduce("", (a, b) -> a + b + "\n");
 
-    String renderedPromptStub =
-        "purpose=" + purpose.name() +
-        "|caseId=" + c.getId() +
-        "|title=" + safe(c.getTitle()) +
-        "|status=" + safe(c.getStatus()) +
-        "|notesCount=" + notes.size() +
-        "|eventsCount=" + events.size();
+    String eventsText = events.stream()
+        .map(e -> "- [" + e.getCreatedAt() + "] " + e.getType().name() + ": " + safe(e.getMessage()))
+        .reduce("", (a, b) -> a + b + "\n");
+
+    Map<String, String> vars = Map.of(
+        "caseId", String.valueOf(c.getId()),
+        "title", safe(c.getTitle()),
+        "status", safe(c.getStatus()),
+        "updatedAt", String.valueOf(c.getUpdatedAt()),
+        "notes", notesText.isBlank() ? "(none)" : notesText,
+        "events", eventsText.isBlank() ? "(none)" : eventsText
+    );
+
+    String renderedPrompt = PromptTemplates.render(template, vars);
+
+    GenerationRequest genReq = new GenerationRequest(
+        purpose.name(),
+        template.id(),
+        template.version(),
+        renderedPrompt,
+        ModelProfile.LOCAL_FAKE_SUMMARIZER,
+        "policy-v1",
+        null,
+        Map.of("caseId", String.valueOf(caseId))
+    );
+
+    GenerationResult gen = ai.generate(genReq);
+    String draftText = gen.text();
+
+    // =========================
+    // Persist draft (+ ADR-0001 provenance)
+    // =========================
 
     CaseSummaryDraft draft = new CaseSummaryDraft();
     draft.setTheCase(c);
     draft.setPurpose(purpose);
     draft.setStatus(DraftStatus.DRAFT);
     draft.setGenerationStatus(GenerationStatus.COMPLETED);
+
     draft.setSourceUpdatedAt(c.getUpdatedAt());
     draft.setInputFingerprint(inputFingerprint);
 
-    draft.setPromptTemplateId(promptTemplateId);
-    draft.setPromptTemplateVersion(promptTemplateVersion);
-    draft.setPromptHash(AuditHashing.sha256Hex(renderedPromptStub));
+    draft.setPromptTemplateId(template.id());
+    draft.setPromptTemplateVersion(template.version());
+    draft.setPromptHash(AuditHashing.sha256Hex(renderedPrompt));
 
-    draft.setModelProvider("LEGACY");
-    draft.setModelId("STUB");
-    draft.setModelConfigJson("{\"temperature\":0}");
-    draft.setGenerationPolicyVersion("v1");
+    draft.setModelProvider(gen.provider());
+    draft.setModelId(gen.modelId());
+    draft.setModelConfigJson("{\"profile\":\"" + ModelProfile.LOCAL_FAKE_SUMMARIZER.name() + "\"}");
+    draft.setGenerationPolicyVersion("policy-v1");
 
     draft.setContentText(draftText);
     draft.setOutputHash(AuditHashing.sha256Hex(draftText));
+
     draft.setCreatedBy("case-service");
     draft.setCorrelationId(null);
 

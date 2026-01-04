@@ -106,8 +106,7 @@ public class CaseEvent {
 
   public Instant getCreatedAt() { return createdAt; }
 
-  public void setCreatedAt(Instant now) {
-    // TODO Auto-generated method stub
-    throw new UnsupportedOperationException("Unimplemented method 'setCreatedAt'");
-  }
+public void setCreatedAt(Instant createdAt) {
+  this.createdAt = createdAt;
+}
 }

@@ -1,6 +1,16 @@
+C:\Users\thric\source\enterprise-ai-modernization\backend\backend\src\main\java\com\example\backend\ai\AiTextGenerator.java
+C:\Users\thric\source\enterprise-ai-modernization\backend\backend\src\main\java\com\example\backend\ai\FakeAiTextGenerator.java
+C:\Users\thric\source\enterprise-ai-modernization\backend\backend\src\main\java\com\example\backend\ai\GenerationRequest.java
+C:\Users\thric\source\enterprise-ai-modernization\backend\backend\src\main\java\com\example\backend\ai\GenerationResult.java
+C:\Users\thric\source\enterprise-ai-modernization\backend\backend\src\main\java\com\example\backend\ai\ModelProfile.java
+C:\Users\thric\source\enterprise-ai-modernization\backend\backend\src\main\java\com\example\backend\ai\OpenAiTextGenerator.java
+C:\Users\thric\source\enterprise-ai-modernization\backend\backend\src\main\java\com\example\backend\ai\PromptTemplates.java
 C:\Users\thric\source\enterprise-ai-modernization\backend\backend\src\main\java\com\example\backend\api\HealthController.java
+C:\Users\thric\source\enterprise-ai-modernization\backend\backend\src\main\java\com\example\backend\cases\AuditActor.java
+C:\Users\thric\source\enterprise-ai-modernization\backend\backend\src\main\java\com\example\backend\cases\AuditHashing.java
 C:\Users\thric\source\enterprise-ai-modernization\backend\backend\src\main\java\com\example\backend\cases\CaseActivityController.java
 C:\Users\thric\source\enterprise-ai-modernization\backend\backend\src\main\java\com\example\backend\cases\CaseActivityService.java
+C:\Users\thric\source\enterprise-ai-modernization\backend\backend\src\main\java\com\example\backend\cases\CaseAuditService.java
 C:\Users\thric\source\enterprise-ai-modernization\backend\backend\src\main\java\com\example\backend\cases\CaseController.java
 C:\Users\thric\source\enterprise-ai-modernization\backend\backend\src\main\java\com\example\backend\cases\CaseDto.java
 C:\Users\thric\source\enterprise-ai-modernization\backend\backend\src\main\java\com\example\backend\cases\CaseEntity.java
@@ -25,6 +35,7 @@ C:\Users\thric\source\enterprise-ai-modernization\backend\backend\src\main\java\
 C:\Users\thric\source\enterprise-ai-modernization\backend\backend\src\main\java\com\example\backend\cases\dto\RejectSummaryDraftRequest.java
 C:\Users\thric\source\enterprise-ai-modernization\backend\backend\src\main\java\com\example\backend\cases\EventType.java
 C:\Users\thric\source\enterprise-ai-modernization\backend\backend\src\main\java\com\example\backend\cases\GenerationStatus.java
+C:\Users\thric\source\enterprise-ai-modernization\backend\backend\src\main\java\com\example\backend\cases\ReviewDecision.java
 C:\Users\thric\source\enterprise-ai-modernization\backend\backend\src\main\java\com\example\backend\cases\SummaryPurpose.java
 C:\Users\thric\source\enterprise-ai-modernization\backend\backend\src\main\java\com\example\backend\cases\UpdateCaseRequest.java
 C:\Users\thric\source\enterprise-ai-modernization\backend\backend\src\main\java\com\example\backend\common\ApiExceptionHandler.java
