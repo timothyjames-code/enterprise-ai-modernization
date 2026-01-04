@@ -7,11 +7,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.HexFormat;
 
 @Service
 public class CaseSummaryDraftService {
@@ -23,18 +20,25 @@ public class CaseSummaryDraftService {
   private final CaseNoteRepository noteRepository;
   private final CaseEventRepository eventRepository;
   private final CaseSummaryDraftRepository draftRepository;
+  private final CaseAuditService auditService;
 
   public CaseSummaryDraftService(
       CaseRepository caseRepository,
       CaseNoteRepository noteRepository,
       CaseEventRepository eventRepository,
-      CaseSummaryDraftRepository draftRepository
+      CaseSummaryDraftRepository draftRepository,
+      CaseAuditService auditService
   ) {
     this.caseRepository = caseRepository;
     this.noteRepository = noteRepository;
     this.eventRepository = eventRepository;
     this.draftRepository = draftRepository;
+    this.auditService = auditService;
   }
+
+  // =========================================================
+  // Create draft
+  // =========================================================
 
   @Transactional
   public CreateDraftResponse createDraft(Long caseId, CreateSummaryDraftRequest req) {
@@ -46,9 +50,19 @@ public class CaseSummaryDraftService {
         : SummaryPurpose.INTERNAL_CASE_OVERVIEW;
 
     // Supersede existing active drafts for this purpose
-    for (CaseSummaryDraft d : draftRepository.findByTheCaseIdAndPurposeAndStatus(caseId, purpose, DraftStatus.DRAFT)) {
+    for (CaseSummaryDraft d :
+        draftRepository.findByTheCaseIdAndPurposeAndStatus(caseId, purpose, DraftStatus.DRAFT)) {
       d.setStatus(DraftStatus.SUPERSEDED);
       draftRepository.save(d);
+
+      auditService.record(
+          c,
+          EventType.SUMMARY_DRAFT_SUPERSEDED,
+          "Summary draft superseded",
+          "{\"draftId\":" + d.getId() + "}",
+          AuditActor.system("case-service"),
+          null
+      );
     }
 
     // Snapshot inputs (server-owned)
@@ -65,12 +79,14 @@ public class CaseSummaryDraftService {
         "|notes=" + notes.size() +
         "|events=" + events.size();
 
-    String fingerprint = sha256(snapshotText);
+    String fingerprint = AuditHashing.sha256Hex(snapshotText);
 
-    // Stub summary (replace later with AI generation)
+    // Stub summary (AI will replace this later)
     String draftText =
-        "Draft summary (stub): Case \"" + safe(c.getTitle()) + "\" is currently \"" + safe(c.getStatus()) + "\". " +
-        "Based on " + notes.size() + " recent notes and " + events.size() + " recent events as of " + c.getUpdatedAt() + ".";
+        "Draft summary (stub): Case \"" + safe(c.getTitle()) + "\" is currently \"" +
+        safe(c.getStatus()) + "\". Based on " + notes.size() +
+        " recent notes and " + events.size() +
+        " recent events as of " + c.getUpdatedAt() + ".";
 
     CaseSummaryDraft draft = new CaseSummaryDraft();
     draft.setTheCase(c);
@@ -82,11 +98,17 @@ public class CaseSummaryDraftService {
     draft.setContentText(draftText);
     draft.setCreatedAt(Instant.now());
     draft.setExpiresAt(Instant.now().plus(7, ChronoUnit.DAYS));
+
     draftRepository.save(draft);
 
-    // Record event
-    recordEvent(c, EventType.SUMMARY_DRAFT_CREATED, "Summary draft created",
-        "{\"draftId\":" + draft.getId() + ",\"purpose\":\"" + purpose.name() + "\"}");
+    auditService.record(
+        c,
+        EventType.SUMMARY_DRAFT_CREATED,
+        "Summary draft created",
+        "{\"draftId\":" + draft.getId() + ",\"purpose\":\"" + purpose.name() + "\"}",
+        AuditActor.system("case-service"),
+        null
+    );
 
     return new CreateDraftResponse(
         draft.getId(),
@@ -96,13 +118,17 @@ public class CaseSummaryDraftService {
     );
   }
 
+  // =========================================================
+  // Get draft
+  // =========================================================
+
   @Transactional(readOnly = true)
   public CaseSummaryDraftDto getDraft(Long caseId, Long draftId) {
     CaseEntity c = caseRepository.findById(caseId)
         .orElseThrow(() -> new EntityNotFoundException("Case not found: " + caseId));
 
     CaseSummaryDraft d = draftRepository.findByIdAndTheCaseId(draftId, caseId)
-        .orElseThrow(() -> new EntityNotFoundException("Draft not found: " + draftId + " for case " + caseId));
+        .orElseThrow(() -> new EntityNotFoundException("Draft not found: " + draftId));
 
     boolean stale = c.getUpdatedAt().isAfter(d.getSourceUpdatedAt());
 
@@ -122,13 +148,17 @@ public class CaseSummaryDraftService {
     );
   }
 
+  // =========================================================
+  // Accept draft
+  // =========================================================
+
   @Transactional
   public CaseDto accept(Long caseId, Long draftId, AcceptSummaryDraftRequest req) {
     CaseEntity c = caseRepository.findById(caseId)
         .orElseThrow(() -> new EntityNotFoundException("Case not found: " + caseId));
 
     CaseSummaryDraft d = draftRepository.findByIdAndTheCaseId(draftId, caseId)
-        .orElseThrow(() -> new EntityNotFoundException("Draft not found: " + draftId + " for case " + caseId));
+        .orElseThrow(() -> new EntityNotFoundException("Draft not found: " + draftId));
 
     if (d.getStatus() != DraftStatus.DRAFT) {
       throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "Draft not reviewable");
@@ -139,6 +169,16 @@ public class CaseSummaryDraftService {
     if (Instant.now().isAfter(d.getExpiresAt())) {
       d.setStatus(DraftStatus.EXPIRED);
       draftRepository.save(d);
+
+      auditService.record(
+          c,
+          EventType.SUMMARY_DRAFT_EXPIRED,
+          "Summary draft expired",
+          "{\"draftId\":" + d.getId() + "}",
+          AuditActor.system("case-service"),
+          null
+      );
+
       throw new ResponseStatusException(HttpStatus.CONFLICT, "Draft expired");
     }
 
@@ -152,21 +192,31 @@ public class CaseSummaryDraftService {
       );
     }
 
-    // Apply to official case record (human-approved action)
+    // Apply to official case record
     c.setSummaryText(d.getContentText());
     c.setUpdatedAt(Instant.now());
     caseRepository.save(c);
 
     d.setStatus(DraftStatus.ACCEPTED);
     d.setReviewedAt(Instant.now());
-    d.setReviewedBy("user"); // replace later with your auth principal
+    d.setReviewedBy("user"); // replace with auth principal
     draftRepository.save(d);
 
-    recordEvent(c, EventType.SUMMARY_ACCEPTED, "Summary accepted",
-        "{\"draftId\":" + d.getId() + ",\"acknowledgeStale\":" + ack + "}");
+    auditService.record(
+        c,
+        EventType.SUMMARY_ACCEPTED,
+        "Summary accepted",
+        "{\"draftId\":" + d.getId() + ",\"acknowledgeStale\":" + ack + "}",
+        AuditActor.user("user", "REVIEWER"),
+        null
+    );
 
     return CaseDto.fromEntity(c);
   }
+
+  // =========================================================
+  // Reject draft
+  // =========================================================
 
   @Transactional
   public CaseSummaryDraftDto reject(Long caseId, Long draftId, RejectSummaryDraftRequest req) {
@@ -174,7 +224,7 @@ public class CaseSummaryDraftService {
         .orElseThrow(() -> new EntityNotFoundException("Case not found: " + caseId));
 
     CaseSummaryDraft d = draftRepository.findByIdAndTheCaseId(draftId, caseId)
-        .orElseThrow(() -> new EntityNotFoundException("Draft not found: " + draftId + " for case " + caseId));
+        .orElseThrow(() -> new EntityNotFoundException("Draft not found: " + draftId));
 
     if (d.getStatus() != DraftStatus.DRAFT) {
       throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "Draft not reviewable");
@@ -182,39 +232,31 @@ public class CaseSummaryDraftService {
 
     d.setStatus(DraftStatus.REJECTED);
     d.setReviewedAt(Instant.now());
-    d.setReviewedBy("user"); // replace later with your auth principal
+    d.setReviewedBy("user"); // replace with auth principal
     draftRepository.save(d);
 
-    String payload = "{\"draftId\":" + d.getId() +
+    String payload =
+        "{\"draftId\":" + d.getId() +
         ",\"reasonCode\":\"" + safe(req != null ? req.reasonCode : "OTHER") + "\"}";
 
-    recordEvent(c, EventType.SUMMARY_REJECTED, "Summary rejected", payload);
+    auditService.record(
+        c,
+        EventType.SUMMARY_REJECTED,
+        "Summary rejected",
+        payload,
+        AuditActor.user("user", "REVIEWER"),
+        null
+    );
 
-    // Return current view
     return getDraft(caseId, draftId);
   }
 
-  private void recordEvent(CaseEntity c, EventType type, String message, String payloadJson) {
-    CaseEvent ev = new CaseEvent();
-    ev.setTheCase(c);
-    ev.setType(type);
-    ev.setMessage(message);
-    ev.setPayloadJson(payloadJson);
-    eventRepository.save(ev);
-  }
+  // =========================================================
+  // Helpers
+  // =========================================================
 
   private static String safe(String s) {
     return (s == null) ? "" : s.replace("\"", "'");
-  }
-
-  private static String sha256(String input) {
-    try {
-      MessageDigest md = MessageDigest.getInstance("SHA-256");
-      byte[] hash = md.digest(input.getBytes(StandardCharsets.UTF_8));
-      return "sha256:" + HexFormat.of().formatHex(hash);
-    } catch (Exception e) {
-      return "sha256:unavailable";
-    }
   }
 
   public record CreateDraftResponse(

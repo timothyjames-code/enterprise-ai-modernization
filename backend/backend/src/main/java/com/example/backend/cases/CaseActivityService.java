@@ -17,17 +17,20 @@ public class CaseActivityService {
   private final CaseRepository caseRepository;
   private final CaseNoteRepository noteRepository;
   private final CaseEventRepository eventRepository;
+  private final CaseAuditService auditService;
   private final ObjectMapper objectMapper;
 
   public CaseActivityService(
       CaseRepository caseRepository,
       CaseNoteRepository noteRepository,
       CaseEventRepository eventRepository,
+      CaseAuditService auditService,
       ObjectMapper objectMapper
   ) {
     this.caseRepository = caseRepository;
     this.noteRepository = noteRepository;
     this.eventRepository = eventRepository;
+    this.auditService = auditService;
     this.objectMapper = objectMapper;
   }
 
@@ -74,7 +77,15 @@ public class CaseActivityService {
     note.setBody(req.body.trim());
     noteRepository.save(note);
 
-    recordEvent(c, EventType.NOTE_ADDED, "Note added", null);
+    auditService.record(
+        c,
+        EventType.NOTE_ADDED,
+        "Note added",
+        null,
+        AuditActor.system("case-service"),
+        null
+    );
+
     touchCase(c);
   }
 
@@ -89,12 +100,15 @@ public class CaseActivityService {
     note.setBody(req.body.trim());
     noteRepository.save(note);
 
-    recordEvent(
+    auditService.record(
         c,
         EventType.NOTE_UPDATED,
         "Note updated",
-        jsonPayload(Map.of("noteId", noteId))
+        jsonPayload(Map.of("noteId", noteId)),
+        AuditActor.system("case-service"),
+        null
     );
+
     touchCase(c);
   }
 
@@ -108,23 +122,16 @@ public class CaseActivityService {
 
     noteRepository.delete(note);
 
-    recordEvent(
+    auditService.record(
         c,
         EventType.NOTE_DELETED,
         "Note deleted",
-        jsonPayload(Map.of("noteId", noteId))
+        jsonPayload(Map.of("noteId", noteId)),
+        AuditActor.system("case-service"),
+        null
     );
-    touchCase(c);
-  }
 
-  @Transactional
-  public void recordEvent(CaseEntity c, EventType type, String message, String payloadJson) {
-    CaseEvent ev = new CaseEvent();
-    ev.setTheCase(c);
-    ev.setType(type);
-    ev.setMessage(message);
-    ev.setPayloadJson(payloadJson);
-    eventRepository.save(ev);
+    touchCase(c);
   }
 
   // --- helpers ---
