@@ -199,6 +199,13 @@ import { ConfirmDialogComponent } from '../../../shared/components/confirm-dialo
         word-break: break-word;
       }
 
+      /* ✅ NEW: show parsed JSON details for events */
+      .eventDetails {
+        margin-top: 4px;
+        font-size: 12px;
+        color: color-mix(in srgb, currentColor 60%, transparent);
+      }
+
       /* ✅ FIX: put actions on their own row so they never clip */
       .noteHeaderActions {
         display: flex;
@@ -436,6 +443,11 @@ import { ConfirmDialogComponent } from '../../../shared/components/confirm-dialo
               <span class="activityTime" *ngIf="store.activityActor(a) as who">• {{ who }}</span>
             </div>
 
+            <!-- ✅ NEW: event details line (parsed from payloadJson) -->
+            <div class="eventDetails" *ngIf="eventDetails(a) as details">
+              {{ details }}
+            </div>
+
             <!-- ✅ actions row (no clipping) -->
             <div class="noteHeaderActions" *ngIf="store.isNote(a) && a.id != null">
               <button
@@ -569,6 +581,49 @@ export class CaseActivityPanelComponent {
     public readonly store: CaseActivityStore,
     public readonly summary: CaseSummaryStore
   ) {}
+
+  // =========================
+  // ✅ NEW: Parse event payloadJson and render friendly details
+  // =========================
+
+  private parsePayload(payloadJson: string | null): any | null {
+    if (!payloadJson) return null;
+    try {
+      return JSON.parse(payloadJson);
+    } catch {
+      return null;
+    }
+  }
+
+  eventDetails(item: ActivityItemDto): string | null {
+    if (item.kind !== 'event') return null;
+
+    const p = this.parsePayload(item.payloadJson ?? null);
+    if (!p) return null;
+
+    const draftId = p.draftId ?? null;
+
+    switch (item.type) {
+      case 'SUMMARY_REJECTED':
+        return `Draft #${draftId ?? '?'} • Reason: ${p.reasonCode ?? 'UNKNOWN'}`;
+
+      case 'SUMMARY_ACCEPTED':
+        return `Draft #${draftId ?? '?'} • Acknowledge stale: ${p.acknowledgeStale ?? false}`;
+
+      case 'SUMMARY_DRAFT_CREATED':
+        return `Draft #${draftId ?? '?'} • Purpose: ${p.purpose ?? 'UNKNOWN'}`;
+
+      case 'SUMMARY_DRAFT_SUPERSEDED':
+        return `Draft #${draftId ?? '?'}`;
+
+      case 'SUMMARY_DRAFT_EXPIRED':
+        return `Draft #${draftId ?? '?'}`;
+
+      default:
+        // Show draftId if present for other summary-related events
+        return draftId ? `Draft #${draftId}` : null;
+    }
+  }
 
   confirmDelete(caseId: number, noteId: number) {
     this.dialog
