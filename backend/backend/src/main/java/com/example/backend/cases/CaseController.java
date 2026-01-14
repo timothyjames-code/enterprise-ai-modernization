@@ -8,6 +8,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -20,9 +21,20 @@ public class CaseController {
   private static final int MAX_PAGE_SIZE = 50;
 
   private final CaseRepository repository;
+  private final CaseEventRepository eventRepository;
+  private final CaseNoteRepository noteRepository;
+  private final CaseSummaryDraftRepository draftRepository;
 
-  public CaseController(CaseRepository repository) {
+  public CaseController(
+      CaseRepository repository,
+      CaseEventRepository eventRepository,
+      CaseNoteRepository noteRepository,
+      CaseSummaryDraftRepository draftRepository
+  ) {
     this.repository = repository;
+    this.eventRepository = eventRepository;
+    this.noteRepository = noteRepository;
+    this.draftRepository = draftRepository;
   }
 
   @GetMapping
@@ -57,7 +69,7 @@ public class CaseController {
     return page.map(CaseDto::fromEntity);
   }
 
-  // ✅ NEW: GET /api/cases/{id}
+  // ✅ GET /api/cases/{id}
   @GetMapping("/{id}")
   public CaseDto getOne(@PathVariable Long id) {
     return repository.findById(id)
@@ -113,8 +125,15 @@ public class CaseController {
   }
 
   @DeleteMapping("/{id}")
+  @Transactional
   public ResponseEntity<Void> delete(@PathVariable Long id) {
     if (!repository.existsById(id)) return ResponseEntity.notFound().build();
+
+    // ✅ Delete children first to satisfy FK constraints (H2 / Postgres / etc.)
+    draftRepository.deleteByTheCaseId(id);
+    noteRepository.deleteByTheCaseId(id);
+    eventRepository.deleteByTheCaseId(id);
+
     repository.deleteById(id);
     return ResponseEntity.noContent().build();
   }

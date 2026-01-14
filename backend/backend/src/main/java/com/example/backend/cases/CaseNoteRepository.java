@@ -1,6 +1,8 @@
 package com.example.backend.cases;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.transaction.annotation.Transactional;
+
 import java.util.List;
 import java.util.Optional;
 
@@ -10,4 +12,8 @@ public interface CaseNoteRepository extends JpaRepository<CaseNote, Long> {
 
   // ✅ for edit/delete safety: guarantees the note belongs to the case
   Optional<CaseNote> findByIdAndTheCaseId(Long id, Long caseId);
+
+  // ✅ REQUIRED for case deletion
+  @Transactional
+  void deleteByTheCaseId(Long caseId);
 }
